@@ -108,6 +108,12 @@
           <span id="fileSummaryText"></span>
           <button class="btn btn-quiet btn-sm" id="clearFilesBtn" type="button">Clear all</button>
         </div>
+
+        <div class="message-block">
+          <label class="message-label" for="messageInput">Message (optional)</label>
+          <textarea class="message-input" id="messageInput" rows="3"
+                    placeholder="Type or paste text — a link, a note, anything"></textarea>
+        </div>
       </article>
 
       <!-- Step 2 — code -->
@@ -121,7 +127,7 @@
           <p class="panel-hint">
             Get a code, then type it into the other device. It connects on its own.
           </p>
-          <button class="btn btn-primary btn-block" id="createCodeBtn" type="button">Get a code</button>
+              <button class="btn btn-primary btn-block" id="createCodeBtn" type="button">Get a code</button>
         </div>
 
         <div class="stage" id="sendStageCode" hidden>
@@ -149,8 +155,8 @@
               <p class="linked-sub">Connected directly and encrypted.</p>
             </div>
           </div>
-          <button class="btn btn-primary btn-block" id="startSendBtn" type="button" disabled>Send files</button>
-          <p class="panel-hint tiny" id="sendReadyHint">Add at least one file to enable sending.</p>
+          <button class="btn btn-primary btn-block" id="startSendBtn" type="button" disabled>Send</button>
+          <p class="panel-hint tiny" id="sendReadyHint">Add a file or type a message to send.</p>
         </div>
       </article>
     </div>

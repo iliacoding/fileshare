@@ -27,6 +27,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The UA's [hidden] rule is only a default: any author rule that sets
+   `display` (like .btn below) silently beats it and the element stays
+   visible. Enforce it once, here, rather than per-component. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -405,6 +410,36 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .file-summary[hidden] { display: none; }
 
+/* Message box --------------------------------------------------------------- */
+.message-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.message-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.message-input {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.87rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 62px;
+}
+.message-input:focus { border-color: var(--accent); outline: none; }
+.message-input::placeholder { color: var(--faint); }
+
 /* --------------------------------------------------------------------------
    Connection code
    -------------------------------------------------------------------------- */
@@ -584,6 +619,29 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .dl-link:hover { border-color: var(--ok); }
 .dl-link svg { width: 13px; height: 13px; }
+
+/* Secondary action next to a primary Save/Share. */
+.dl-quiet { color: var(--muted); }
+.dl-quiet:hover { border-color: var(--border-hi); }
+
+/* Text messages ------------------------------------------------------------- */
+.text-body {
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--r);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  /* Peer text is arbitrary: wrap long links instead of scrolling the page. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+  user-select: text;
+}
 
 /* --------------------------------------------------------------------------
    Toasts

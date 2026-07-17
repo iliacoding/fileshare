@@ -68,6 +68,42 @@ const Util = (() => {
     return name.slice(dot + 1).slice(0, 4).toUpperCase();
   };
 
+  const MIME_BY_EXT = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+    bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm',
+    mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', aac: 'audio/aac',
+    pdf: 'application/pdf', txt: 'text/plain', zip: 'application/zip',
+  };
+
+  /**
+   * Best-effort media type for a received file.
+   *
+   * This matters more than it looks: iOS only offers "Save Image"/"Save Video"
+   * in the share sheet when the file carries a real media type, and some file
+   * pickers hand us an empty or generic type.
+   */
+  const guessMime = (name, given) => {
+    if (given && given !== 'application/octet-stream') return given;
+    const ext = String(name).split('.').pop()?.toLowerCase();
+    return MIME_BY_EXT[ext] || given || 'application/octet-stream';
+  };
+
+  const isSaveableMedia = (mime) => /^(image|video)\//.test(mime || '');
+
+  /** A message that is exactly one http(s) link, or null. */
+  const asSingleUrl = (text) => {
+    const trimmed = String(text).trim();
+    if (!trimmed || /\s/.test(trimmed)) return null;
+    try {
+      const url = new URL(trimmed);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+    } catch {
+      return null;
+    }
+  };
+
   /** Strip path separators and control characters from a peer-supplied name. */
   const sanitizeFilename = (name) => {
     const cleaned = String(name || 'file')
@@ -170,6 +206,7 @@ const Util = (() => {
 
   return {
     $, $$, el, formatBytes, formatSpeed, formatDuration, fileExt, sanitizeFilename,
+    guessMime, isSaveableMedia, asSingleUrl,
     bytesToBase64Url, base64UrlToBytes, bytesToBase64, base64ToBytes,
     toast, copyText, readClipboard, vibrate,
   };
@@ -922,9 +959,14 @@ const Transfer = (() => {
     START: 'file-start',
     END: 'file-end',
     ACK: 'file-ack',
+    TEXT: 'text',
     CANCEL: 'cancel',
     DONE: 'all-done',
   };
+
+  // A pasted message should never be big enough to matter; anything larger is
+  // either a mistake or someone poking at us.
+  const MAX_TEXT_LENGTH = 100000;
 
   /** Exponential moving average of throughput, plus an ETA. */
   class RateMeter {
@@ -1011,6 +1053,12 @@ const Transfer = (() => {
     cancel() {
       this.cancelled = true;
       try { this._send({ type: MSG.CANCEL }); } catch { /* channel already gone */ }
+    }
+
+    /** Send a text message. Small enough to go in one control frame. */
+    sendText(body) {
+      const text = String(body).slice(0, MAX_TEXT_LENGTH);
+      this._send({ type: MSG.TEXT, id: `t${Date.now()}`, body: text });
     }
 
     /**
@@ -1136,15 +1184,23 @@ const Transfer = (() => {
       try { msg = JSON.parse(text); } catch { return; }
 
       switch (msg.type) {
+        case MSG.TEXT: {
+          const body = typeof msg.body === 'string' ? msg.body.slice(0, MAX_TEXT_LENGTH) : '';
+          if (!body) return;
+          this.handlers.onText?.(String(msg.id), body);
+          break;
+        }
+
         case MSG.START: {
           // Validate before trusting anything the peer told us.
           const size = Number(msg.size);
           if (!Number.isFinite(size) || size < 0) return;
+          const name = Util.sanitizeFilename(msg.name);
           this.current = {
             id: String(msg.id),
-            name: Util.sanitizeFilename(msg.name),
+            name,
             size,
-            mime: typeof msg.mime === 'string' ? msg.mime : 'application/octet-stream',
+            mime: Util.guessMime(name, typeof msg.mime === 'string' ? msg.mime : ''),
             received: 0,
             pending: [],
             pendingBytes: 0,
@@ -1181,7 +1237,7 @@ const Transfer = (() => {
           this.handlers.onProgress?.(file.id, {
             received: file.size, total: file.size, speed: 0, eta: 0, state: 'done',
           });
-          this.handlers.onFileComplete?.(file.id, blob, file.name);
+          this.handlers.onFileComplete?.(file.id, blob, file.name, file.mime);
           break;
         }
 
@@ -1261,6 +1317,8 @@ const App = (() => {
     objectUrls: [],
     unsubscribe: null,   // stops the broker subscription
     waitTimer: 0,
+    recvFileCount: 0,
+    recvTextCount: 0,
   };
 
   let fileSeq = 0;
@@ -1316,8 +1374,11 @@ const App = (() => {
     state.objectUrls.forEach(URL.revokeObjectURL);
     state.objectUrls = [];
     state.rows.clear();
+    state.recvFileCount = 0;
+    state.recvTextCount = 0;
 
     state.files = [];
+    $('#messageInput').value = '';
     renderFileList();
 
     // Send screen.
@@ -1407,13 +1468,16 @@ const App = (() => {
     updateSendReady();
   }
 
+  const messageText = () => $('#messageInput').value.trim();
+
   function updateSendReady() {
     const btn = $('#startSendBtn');
     const hint = $('#sendReadyHint');
     if (!btn) return;
     const linked = !$('#sendStageLinked').hidden;
-    btn.disabled = !(linked && state.files.length > 0 && !state.sender?.active);
-    if (hint) hint.hidden = state.files.length > 0;
+    const hasSomething = state.files.length > 0 || messageText().length > 0;
+    btn.disabled = !(linked && hasSomething && !state.sender?.active);
+    if (hint) hint.hidden = hasSomething;
   }
 
   /* ---- transfer rows ---- */
@@ -1482,18 +1546,90 @@ const App = (() => {
     }
   }
 
-  function addDownload(id, blob, name) {
+  const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>';
+  const ICON_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3"/><path d="m8 7 4-4 4 4"/><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/></svg>';
+
+  /**
+   * Offer the ways this platform can actually keep a received file.
+   *
+   * A download link can't reach the iOS photo library — Safari files downloads
+   * away in the Files app. The native share sheet is the only route to "Save
+   * Image"/"Save Video", so when the platform can share the file we lead with
+   * that, and keep the plain download as a fallback everywhere.
+   */
+  function addSaveActions(id, blob, name, mime) {
     const row = state.rows.get(id);
     if (!row) return;
+
+    const file = new File([blob], name, { type: mime });
+    const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+
+    if (canShare) {
+      const media = Util.isSaveableMedia(mime);
+      const btn = el('button', 'dl-link');
+      btn.type = 'button';
+      btn.innerHTML = ICON_SHARE;
+      btn.appendChild(document.createTextNode(media ? 'Save to Photos' : 'Share'));
+      btn.addEventListener('click', async () => {
+        try {
+          // Must stay inside the user gesture, so no awaits before this.
+          await navigator.share({ files: [file] });
+        } catch (err) {
+          // Dismissing the sheet is normal, not a failure worth reporting.
+          if (err && err.name !== 'AbortError') {
+            Util.toast('This device would not open the share sheet. Use Save instead.', 'warn', 5000);
+          }
+        }
+      });
+      row.actions.appendChild(btn);
+    }
+
     const url = URL.createObjectURL(blob);
     state.objectUrls.push(url);
-
-    const link = el('a', 'dl-link');
+    const link = el('a', canShare ? 'dl-link dl-quiet' : 'dl-link');
     link.href = url;
     link.download = name;
-    link.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>';
-    link.appendChild(document.createTextNode(`Save ${name}`));
+    link.innerHTML = ICON_DOWNLOAD;
+    link.appendChild(document.createTextNode('Save'));
     row.actions.appendChild(link);
+  }
+
+  /** A received or sent text message, rendered as a card in the transfer list. */
+  function textRow(listSel, body, stateLabel) {
+    const root = el('li', 'transfer-row text-row');
+    root.dataset.state = 'done';
+
+    const top = el('div', 'transfer-top');
+    top.appendChild(el('span', 'transfer-name', 'Message'));
+    top.appendChild(el('span', 'transfer-state', stateLabel));
+    root.appendChild(top);
+
+    // textContent, never innerHTML: this string came from the other device.
+    root.appendChild(el('pre', 'text-body', body));
+
+    const actions = el('div', 'transfer-actions');
+    const copy = el('button', 'dl-link');
+    copy.type = 'button';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', async () => {
+      const ok = await Util.copyText(body);
+      Util.toast(ok ? 'Copied.' : 'Could not copy — select the text instead.', ok ? 'ok' : 'warn', 2500);
+    });
+    actions.appendChild(copy);
+
+    // Sending yourself a link is the main reason to use this at all.
+    const url = Util.asSingleUrl(body);
+    if (url) {
+      const open = el('a', 'dl-link dl-quiet');
+      open.href = url;
+      open.target = '_blank';
+      open.rel = 'noopener noreferrer';
+      open.textContent = 'Open link';
+      actions.appendChild(open);
+    }
+
+    root.appendChild(actions);
+    $(listSel).appendChild(root);
   }
 
   /* ---- shared connection handlers ---- */
@@ -1588,32 +1724,57 @@ const App = (() => {
   }
 
   async function startSending() {
-    if (!state.sender || !state.files.length) return;
+    const message = messageText();
+    if (!state.sender || (!state.files.length && !message)) return;
 
     $('#startSendBtn').disabled = true;
     $('#sendTransferPanel').hidden = false;
-    $('#cancelSendBtn').hidden = false;
     $('#sendTransfers').textContent = '';
     state.rows.clear();
     setStatus('sending');
 
-    for (const { id, file } of state.files) transferRow('#sendTransfers', id, file.name, file.size);
+    // The message rides in a single control frame, so it lands immediately.
+    if (message) {
+      try {
+        state.sender.sendText(message);
+        textRow('#sendTransfers', message, 'Sent');
+        $('#messageInput').value = '';
+      } catch (err) {
+        setStatus('error');
+        Util.toast(err.message || 'The message could not be sent.', 'error', 6000);
+        updateSendReady();
+        return;
+      }
+    }
+
+    const fileCount = state.files.length;
+    if (fileCount) {
+      $('#cancelSendBtn').hidden = false;
+      for (const { id, file } of state.files) transferRow('#sendTransfers', id, file.name, file.size);
+    }
 
     const started = performance.now();
     const totalBytes = state.files.reduce((sum, f) => sum + f.file.size, 0);
 
     try {
+      // Always goes through sendAll, even with no files: it emits the
+      // end-of-transfer marker that moves the receiver off "Connected".
       await state.sender.sendAll(state.files);
       if (state.sender.cancelled) {
         setStatus('error');
       } else {
         setStatus('complete');
-        const seconds = (performance.now() - started) / 1000;
-        Util.toast(
-          `Sent ${state.files.length} file${state.files.length === 1 ? '' : 's'} · ${Util.formatBytes(totalBytes)} in ${Util.formatDuration(seconds)}.`,
-          'ok', 6000,
-        );
-        Util.vibrate([40, 60, 40]);
+        if (fileCount) {
+          const seconds = (performance.now() - started) / 1000;
+          Util.toast(
+            `Sent ${fileCount} file${fileCount === 1 ? '' : 's'} · ${Util.formatBytes(totalBytes)} in ${Util.formatDuration(seconds)}.`,
+            'ok', 6000,
+          );
+          Util.vibrate([40, 60, 40]);
+        } else {
+          Util.toast('Message sent.', 'ok', 3500);
+          Util.vibrate(40);
+        }
       }
     } catch (err) {
       setStatus('error');
@@ -1716,6 +1877,13 @@ const App = (() => {
     Util.toast('Connected. Waiting for files…', 'ok');
 
     state.receiver = new Transfer.Receiver(channel, {
+      onText: (id, body) => {
+        $('#recvIdleHint').hidden = true;
+        state.recvTextCount++;
+        textRow('#recvTransfers', body, 'Received');
+        Util.toast('Message received.', 'ok', 4000);
+        Util.vibrate(40);
+      },
       onFileStart: (id, info) => {
         $('#recvIdleHint').hidden = true;
         $('#cancelRecvBtn').hidden = false;
@@ -1723,15 +1891,18 @@ const App = (() => {
         transferRow('#recvTransfers', id, info.name, info.size);
       },
       onProgress: (id, info) => updateRow(id, info),
-      onFileComplete: (id, blob, name) => {
-        addDownload(id, blob, name);
+      onFileComplete: (id, blob, name, mime) => {
+        state.recvFileCount++;
+        addSaveActions(id, blob, name, mime);
         Util.toast(`"${name}" received — ${Util.formatBytes(blob.size)}.`, 'ok', 5000);
         Util.vibrate([40, 60, 40]);
       },
       onAllDone: () => {
         setStatus('complete');
         $('#cancelRecvBtn').hidden = true;
-        Util.toast('All files received. Use the Save buttons to keep them.', 'ok', 6000);
+        if (state.recvFileCount > 0) {
+          Util.toast('All files received. Use the Save buttons to keep them.', 'ok', 6000);
+        }
       },
       onRemoteCancel: () => {
         setStatus('error');
@@ -1807,6 +1978,9 @@ const App = (() => {
       state.files = [];
       renderFileList();
     });
+
+    // A message alone is enough to enable sending, so track it too.
+    $('#messageInput').addEventListener('input', updateSendReady);
   }
 
   function wireCodeEntry() {
