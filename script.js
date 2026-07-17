@@ -1661,13 +1661,26 @@ const App = (() => {
     // Files instead.
     const media = Util.isSaveableMedia(mime);
     const saveName = Util.ensureExt(name, mime);
-    const file = new File([blob], saveName, { type: mime });
 
-    // Show the share button whenever the browser has Web Share. When canShare
-    // exists we trust it; when it doesn't (older Safari), we still offer the
-    // button rather than hiding the only path to Photos.
+    // The File we hand to the share sheet. We received the video as many chunks
+    // and assembled it as a multi-part Blob; iOS can mis-handle that when
+    // sharing (the sheet appears and "Save Video" seems to work, but Photos
+    // gets a broken or empty clip). Re-fetching the object URL collapses it
+    // into one contiguous blob, which saves reliably. We do this now, ahead of
+    // the tap — navigator.share must run synchronously inside the click, so any
+    // await immediately before it makes iOS reject the share.
+    let shareFile = new File([blob], saveName, { type: mime });
+    fetch(url)
+      .then((r) => r.blob())
+      .then((fresh) => { shareFile = new File([fresh], saveName, { type: mime || fresh.type }); })
+      .catch(() => { /* keep the direct File as a fallback */ });
+
+    // iOS is the whole reason this button exists, and its canShare can be
+    // falsely negative, so always show the button there when Web Share exists.
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+      || (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
     const shareSupported = typeof navigator.share === 'function'
-      && (!navigator.canShare || navigator.canShare({ files: [file] }));
+      && (isIOS || !navigator.canShare || navigator.canShare({ files: [shareFile] }));
 
     if (shareSupported) {
       const btn = el('button', 'dl-link');
@@ -1677,7 +1690,7 @@ const App = (() => {
       btn.addEventListener('click', async () => {
         try {
           // Must stay inside the user gesture — no awaits before this call.
-          await navigator.share({ files: [file] });
+          await navigator.share({ files: [shareFile] });
         } catch (err) {
           // Dismissing the sheet is normal, not a failure worth reporting.
           if (err && err.name !== 'AbortError') {
@@ -2026,23 +2039,13 @@ const App = (() => {
   /* ---- QR: show on send, scan on receive ---- */
 
   /**
-   * A scannable deep link that carries the connection code in its fragment.
-   * Opening it (native camera or in-app scanner) lands on the receive screen
-   * and connects on its own — see the auto-connect check in init().
+   * Render the code as a QR into the send screen, or hide the block if we can't.
+   *
+   * The QR carries the bare code — not a URL — on purpose: scanning it with the
+   * website's own scanner reads the code and connects in place, and scanning it
+   * with a phone's native camera does nothing intrusive (no link to open). The
+   * receiving device is expected to already have Beam open.
    */
-  function connectUrl(code) {
-    let base;
-    try {
-      base = location.origin && location.origin !== 'null'
-        ? location.origin + location.pathname
-        : location.href.split(/[#?]/)[0];
-    } catch {
-      base = location.href.split(/[#?]/)[0];
-    }
-    return `${base}#r=${code}`;
-  }
-
-  /** Render the code as a QR into the send screen, or hide the block if we can't. */
   function renderSendQr(code) {
     const wrap = $('#sendQr');
     const canvas = $('#qrCanvas');
@@ -2052,7 +2055,7 @@ const App = (() => {
     if (typeof qrcode === 'undefined') { wrap.hidden = true; return; }
     try {
       const qr = qrcode(0, 'M');                 // 0 = smallest fitting version, M = ~15% ECC
-      qr.addData(connectUrl(code));
+      qr.addData(code);
       qr.make();
       // Scalable SVG: crisp at any size, sized by CSS. margin 0 — the white
       // .qr-canvas padding already provides the quiet zone scanners need.
