@@ -133,7 +133,7 @@
         <div class="stage" id="sendStageCode" hidden>
           <p class="panel-hint">On the other device, open this site, tap <strong>Receive files</strong>, and enter:</p>
           <div class="code-display" id="codeDisplay" aria-label="Your connection code">
-            <span class="code-value" id="codeValue">···-···</span>
+            <span class="code-value" id="codeValue">···-···-···</span>
             <button class="btn btn-icon code-copy" id="copyCodeBtn" type="button" aria-label="Copy code">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -147,11 +147,19 @@
             <p class="panel-hint tiny">On the other device: tap <strong>Receive files → Scan QR code</strong>, then point it at this square. It connects on its own.</p>
           </div>
 
+          <div class="code-timer" id="codeTimer" hidden role="timer" aria-live="off">
+            <svg class="code-timer-ring" viewBox="0 0 36 36" aria-hidden="true">
+              <circle class="ct-track" cx="18" cy="18" r="16"/>
+              <circle class="ct-fill" id="ctFill" cx="18" cy="18" r="16"/>
+            </svg>
+            <span>Code expires in <b id="codeTimerText">0:30</b></span>
+          </div>
+
           <div class="waiting-line" id="sendWaiting">
             <span class="spinner" aria-hidden="true"></span>
             <span id="sendWaitingText">Waiting for the other device…</span>
           </div>
-          <p class="panel-hint tiny">The code works once, and only while this page stays open.</p>
+          <p class="panel-hint tiny">The code works once, expires after 30 seconds, and only while this page stays open.</p>
         </div>
 
         <div class="stage" id="sendStageLinked" hidden>
@@ -200,7 +208,7 @@
           <form id="codeForm" autocomplete="off">
             <input class="code-input" id="codeInput" type="text" inputmode="text"
                    autocapitalize="characters" autocorrect="off" spellcheck="false"
-                   maxlength="7" placeholder="4K9-T2M" aria-label="Connection code">
+                   maxlength="11" placeholder="4K9-T2M-8QP" aria-label="Connection code">
             <button class="btn btn-primary btn-block" id="joinBtn" type="submit">Connect</button>
           </form>
 

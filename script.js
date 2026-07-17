@@ -247,12 +247,12 @@ const Util = (() => {
    two encrypted handshake messages and is out of the picture once the peers
    connect directly.
 
-   Security note: a 6-character code is ~30 bits. That is deliberately not
+   Security note: a 9-character code is ~45 bits. That is deliberately not
    strong enough to protect a long-lived secret, and it doesn't have to be —
    an attacker must first find the topic, which means guessing online against
-   a rate-limited broker during the few seconds a session is live. PBKDF2 with
-   a high iteration count makes each guess expensive. If you want more margin,
-   raise CODE_LENGTH.
+   a rate-limited broker during the ~30 seconds a session is live before the
+   code expires. PBKDF2 with a high iteration count makes each guess expensive.
+   If you want more margin, raise CODE_LENGTH.
    ========================================================================== */
 const Rendezvous = (() => {
   const BROKER = 'https://ntfy.sh';
@@ -260,7 +260,7 @@ const Rendezvous = (() => {
   // Crockford-style alphabet: no I, L, O or U, so codes can't be misread or
   // accidentally spell anything. 32 chars divides 256 evenly — no modulo bias.
   const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  const CODE_LENGTH = 6;
+  const CODE_LENGTH = 9;
 
   const PBKDF2_ITERATIONS = 250000;
   const REPLAY_WINDOW = '10m';        // let a peer pick up a handshake sent before it subscribed
@@ -302,7 +302,9 @@ const Rendezvous = (() => {
       .replace(/U/g, 'V');
   }
 
-  const formatCode = (code) => `${code.slice(0, 3)}-${code.slice(3)}`;
+  // Group into threes: "ABCDEFGHI" -> "ABC-DEF-GHI". Works for partial input
+  // too, so the receiver's field can format as the user types.
+  const formatCode = (code) => String(code).replace(/(.{3})(?=.)/g, '$1-');
 
   const isValidCode = (code) =>
     code.length === CODE_LENGTH && [...code].every((c) => ALPHABET.includes(c));
@@ -1378,6 +1380,7 @@ const App = (() => {
     objectUrls: [],
     unsubscribe: null,   // stops the broker subscription
     waitTimer: 0,
+    codeTimer: 0,        // interval id for the code-expiry countdown
     recvFileCount: 0,
     recvTextCount: 0,
     scan: null,          // active camera scan session, see openScanner()
@@ -1425,6 +1428,7 @@ const App = (() => {
   /** Drop the connection, stop listening, and reset all per-session UI. */
   function teardown() {
     closeScanner();
+    stopCodeCountdown();
     state.unsubscribe?.();
     state.unsubscribe = null;
     clearTimeout(state.waitTimer);
@@ -1453,7 +1457,7 @@ const App = (() => {
     $('#cancelSendBtn').hidden = true;
     $('#createCodeBtn').disabled = false;
     $('#createCodeBtn').textContent = 'Get a code';
-    $('#codeValue').textContent = '···-···';
+    $('#codeValue').textContent = '···-···-···';
     $('#sendQr').hidden = true;
     $('#qrCanvas').textContent = '';
     $('#sendWaiting').hidden = false;
@@ -1773,6 +1777,67 @@ const App = (() => {
     };
   }
 
+  /* ---- code expiry countdown ---- */
+
+  // A code is short-lived on purpose: it only has to live long enough for the
+  // other device to scan or type it. Thirty seconds keeps the guessing window
+  // (see the Rendezvous security note) tiny.
+  const CODE_TTL_MS = 30000;
+  const RING_C = 100.53;                 // 2·π·16, matches .ct-fill's dasharray
+
+  /** Start (or restart) the visible 30s countdown on the send screen. */
+  function startCodeCountdown() {
+    const timer = $('#codeTimer');
+    if (!timer) return;
+    clearInterval(state.codeTimer);
+    const deadline = performance.now() + CODE_TTL_MS;
+    timer.hidden = false;
+
+    const render = () => {
+      const remaining = Math.max(0, deadline - performance.now());
+      const secs = Math.ceil(remaining / 1000);
+      $('#codeTimerText').textContent = `0:${String(secs).padStart(2, '0')}`;
+      $('#ctFill').style.strokeDashoffset = String(RING_C * (1 - remaining / CODE_TTL_MS));
+      timer.dataset.level = secs <= 5 ? 'low' : secs <= 10 ? 'warn' : 'ok';
+      if (remaining <= 0) expireSendCode();
+    };
+
+    render();
+    state.codeTimer = setInterval(render, 250);
+  }
+
+  function stopCodeCountdown() {
+    clearInterval(state.codeTimer);
+    state.codeTimer = 0;
+    const timer = $('#codeTimer');
+    if (timer) timer.hidden = true;
+  }
+
+  /** Timed out with no one connected: drop the offer and reset to the start. */
+  function expireSendCode() {
+    stopCodeCountdown();
+    state.unsubscribe?.();
+    state.unsubscribe = null;
+    state.connection?.close();
+    state.connection = null;
+    state.sender = null;
+
+    $('#sendStageCode').hidden = true;
+    $('#sendStageLinked').hidden = true;
+    $('#sendStageStart').hidden = false;
+    $('#sendQr').hidden = true;
+    $('#qrCanvas').textContent = '';
+    $('#codeValue').textContent = '···-···-···';
+    $('#sendWaiting').hidden = false;
+
+    const btn = $('#createCodeBtn');
+    btn.disabled = false;
+    btn.textContent = 'Get a new code';
+
+    setStatus('error');
+    Util.toast('That code expired for safety. Tap “Get a new code” to try again.', 'warn', 6000);
+  }
+
   /* ---- send flow ---- */
 
   async function createCode() {
@@ -1798,6 +1863,7 @@ const App = (() => {
       $('#sendStageStart').hidden = true;
       $('#sendStageCode').hidden = false;
       setStatus('waiting');
+      startCodeCountdown();
 
       // Listen for the receiver's answer. Our own offer comes back on this
       // stream too; the role prefix makes it a no-op.
@@ -1807,6 +1873,7 @@ const App = (() => {
         const answer = await Rendezvous.unseal(session, Rendezvous.ROLE_ANSWER, payload);
         if (!answer) return;
         accepted = true;
+        stopCodeCountdown();            // the code has been used — stop expiring it
         state.unsubscribe?.();
         state.unsubscribe = null;
         try {
@@ -1829,6 +1896,7 @@ const App = (() => {
   }
 
   function onSenderChannelOpen(channel) {
+    stopCodeCountdown();
     setStatus('connected');
     Util.vibrate(40);
 

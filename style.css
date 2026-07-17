@@ -462,9 +462,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .code-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(1.7rem, 7vw, 2.2rem);
+  /* Sized to fit the longer 9-char (XXX-XXX-XXX) code without wrapping. */
+  font-size: clamp(1.3rem, 5.6vw, 1.9rem);
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
   /* Codes get read aloud and retyped, so make every glyph unambiguous. */
   font-variant-numeric: slashed-zero tabular-nums;
   user-select: all;
@@ -533,9 +535,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
   background: var(--bg);
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 1.5rem;
+  font-size: clamp(1.15rem, 5.5vw, 1.45rem);
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-align: center;
   text-transform: uppercase;
   font-variant-numeric: slashed-zero tabular-nums;
@@ -568,6 +570,50 @@ button, input, textarea, select { font: inherit; color: inherit; }
   color: var(--muted);
 }
 .waiting-line[hidden] { display: none; }
+
+/* Countdown to code expiry ------------------------------------------------- */
+.code-timer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+.code-timer[hidden] { display: none; }
+.code-timer b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.code-timer-ring {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  transform: rotate(-90deg);        /* start the sweep at 12 o'clock */
+}
+.ct-track { fill: none; stroke: var(--border-hi); stroke-width: 3; }
+.ct-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* dasharray = circumference (2·π·16 ≈ 100.53); offset is set from JS. */
+  stroke-dasharray: 100.53;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.25s linear, stroke 0.25s linear;
+}
+
+/* Last ten seconds: warn, then danger. */
+.code-timer[data-level="warn"] .ct-fill { stroke: var(--warn); }
+.code-timer[data-level="warn"] b       { color: var(--warn); }
+.code-timer[data-level="low"]  .ct-fill { stroke: var(--danger); }
+.code-timer[data-level="low"]  b        { color: var(--danger); }
 
 .spinner {
   width: 13px; height: 13px;
