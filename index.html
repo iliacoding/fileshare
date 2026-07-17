@@ -4,20 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="description" content="Peer-to-peer file sharing in your browser. Files travel directly between devices over an encrypted WebRTC connection — never through a server.">
+<meta name="description" content="Send files directly between two devices. Files move peer-to-peer over an encrypted connection and are never uploaded to a server.">
 <meta name="robots" content="noindex">
-<title>Beam — peer-to-peer file transfer</title>
+<title>Beam — send files between devices</title>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
 </head>
 <body>
-
-<!-- Ambient background blobs (decorative) -->
-<div class="aurora" aria-hidden="true">
-  <span class="blob blob-a"></span>
-  <span class="blob blob-b"></span>
-  <span class="blob blob-c"></span>
-</div>
 
 <header class="site-header">
   <a class="brand" href="#" data-nav="home">
@@ -37,12 +30,12 @@
 <main id="main">
 
   <!-- ═══════════════════ HOME ═══════════════════ -->
-  <section class="screen is-active" id="screen-home" aria-labelledby="home-title">
+  <section class="screen" id="screen-home" aria-labelledby="home-title">
     <div class="hero">
-      <h1 id="home-title" class="hero-title">Send files <em>straight</em> to another device</h1>
+      <h1 id="home-title" class="hero-title">Send files between two devices</h1>
       <p class="hero-sub">
-        A direct, encrypted connection between two browsers. No account, no upload, no server in the middle —
-        your files never leave the two devices holding them.
+        Share a six-character code, then files go straight from one browser to the other, encrypted.
+        Nothing is uploaded to a server.
       </p>
     </div>
 
@@ -55,9 +48,8 @@
         </span>
         <span class="choice-body">
           <span class="choice-title">Send files</span>
-          <span class="choice-desc">Pick your files and show a code for the other device to scan.</span>
+          <span class="choice-desc">Pick files and get a code to read out.</span>
         </span>
-        <span class="choice-arrow" aria-hidden="true">→</span>
       </button>
 
       <button class="choice-card" data-nav="receive" type="button">
@@ -68,16 +60,15 @@
         </span>
         <span class="choice-body">
           <span class="choice-title">Receive files</span>
-          <span class="choice-desc">Scan the sender's code, then send back your reply code.</span>
+          <span class="choice-desc">Type the code the other device shows.</span>
         </span>
-        <span class="choice-arrow" aria-hidden="true">→</span>
       </button>
     </div>
 
     <ul class="feature-row">
-      <li><strong>End-to-end encrypted</strong><span>DTLS is mandatory in WebRTC — every byte is encrypted in transit.</span></li>
-      <li><strong>No upload</strong><span>Bytes flow device-to-device. Nothing is stored or relayed by us.</span></li>
-      <li><strong>No tracking</strong><span>No analytics, no cookies, no network calls beyond the connection itself.</span></li>
+      <li><strong>Encrypted</strong><span>WebRTC always encrypts the connection with DTLS.</span></li>
+      <li><strong>No upload</strong><span>Bytes move device to device. Files never touch a server.</span></li>
+      <li><strong>No tracking</strong><span>No analytics, no cookies, no accounts.</span></li>
     </ul>
 
     <p class="compat-note" id="compatNote" hidden></p>
@@ -119,53 +110,35 @@
         </div>
       </article>
 
-      <!-- Step 2 — handshake -->
-      <article class="panel" id="sendHandshakePanel">
+      <!-- Step 2 — code -->
+      <article class="panel" id="sendCodePanel">
         <header class="panel-head">
           <span class="step-badge">2</span>
-          <h3>Link the two devices</h3>
+          <h3>Share the code</h3>
         </header>
 
         <div class="stage" id="sendStageStart">
           <p class="panel-hint">
-            Create an invite code, show it to the other device, then paste back the reply it gives you.
+            Get a code, then type it into the other device. It connects on its own.
           </p>
-          <button class="btn btn-primary btn-block" id="createConnBtn" type="button">Create connection</button>
+          <button class="btn btn-primary btn-block" id="createCodeBtn" type="button">Get a code</button>
         </div>
 
-        <div class="stage" id="sendStageOffer" hidden>
-          <p class="panel-hint">
-            <strong>Step A.</strong> On the other device, open this site, tap <em>Receive files</em>, and scan this code.
-          </p>
-          <div class="qr-frame">
-            <canvas class="qr-canvas" id="offerQr" aria-label="QR code containing your invite"></canvas>
-            <p class="qr-fallback" id="offerQrFallback" hidden></p>
-          </div>
-          <details class="code-details">
-            <summary>Can't scan? Copy the invite text</summary>
-            <textarea class="code-box" id="offerText" readonly rows="4" spellcheck="false"></textarea>
-            <div class="code-actions">
-              <button class="btn btn-quiet btn-sm" data-copy="#offerText" type="button">Copy invite</button>
-            </div>
-          </details>
-
-          <hr class="rule">
-
-          <p class="panel-hint">
-            <strong>Step B.</strong> The other device will show a reply code. Scan or paste it here.
-          </p>
-          <div class="input-row">
-            <textarea class="code-box" id="answerText" rows="3" spellcheck="false"
-                      placeholder="Paste the reply code…" aria-label="Reply code from the receiver"></textarea>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-quiet" data-scan="#answerText" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
-              Scan QR
+        <div class="stage" id="sendStageCode" hidden>
+          <p class="panel-hint">On the other device, open this site, tap <strong>Receive files</strong>, and enter:</p>
+          <div class="code-display" id="codeDisplay" aria-label="Your connection code">
+            <span class="code-value" id="codeValue">···-···</span>
+            <button class="btn btn-icon code-copy" id="copyCodeBtn" type="button" aria-label="Copy code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
             </button>
-            <button class="btn btn-quiet" data-paste="#answerText" type="button">Paste</button>
-            <button class="btn btn-primary btn-grow" id="acceptAnswerBtn" type="button">Connect</button>
           </div>
+          <div class="waiting-line" id="sendWaiting">
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="sendWaitingText">Waiting for the other device…</span>
+          </div>
+          <p class="panel-hint tiny">The code works once, and only while this page stays open.</p>
         </div>
 
         <div class="stage" id="sendStageLinked" hidden>
@@ -173,7 +146,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
             <div>
               <p class="linked-title">Devices linked</p>
-              <p class="linked-sub">The channel is open and encrypted. You're ready to send.</p>
+              <p class="linked-sub">Connected directly and encrypted.</p>
             </div>
           </div>
           <button class="btn btn-primary btn-block" id="startSendBtn" type="button" disabled>Send files</button>
@@ -182,7 +155,6 @@
       </article>
     </div>
 
-    <!-- Transfers -->
     <article class="panel panel-wide" id="sendTransferPanel" hidden>
       <header class="panel-head">
         <span class="step-badge">3</span>
@@ -207,99 +179,52 @@
       <article class="panel">
         <header class="panel-head">
           <span class="step-badge">1</span>
-          <h3>Read the sender's invite</h3>
+          <h3>Enter the code</h3>
         </header>
 
-        <div class="stage" id="recvStageOffer">
-          <p class="panel-hint">Scan the QR code shown on the sending device, or paste its invite text.</p>
-          <div class="input-row">
-            <textarea class="code-box" id="offerInput" rows="4" spellcheck="false"
-                      placeholder="Paste the invite code…" aria-label="Invite code from the sender"></textarea>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-quiet" data-scan="#offerInput" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
-              Scan QR
-            </button>
-            <button class="btn btn-quiet" data-paste="#offerInput" type="button">Paste</button>
-            <button class="btn btn-primary btn-grow" id="joinBtn" type="button">Join connection</button>
-          </div>
+        <div class="stage" id="recvStageCode">
+          <p class="panel-hint">Type the six characters shown on the sending device.</p>
+          <form id="codeForm" autocomplete="off">
+            <input class="code-input" id="codeInput" type="text" inputmode="text"
+                   autocapitalize="characters" autocorrect="off" spellcheck="false"
+                   maxlength="7" placeholder="4K9-T2M" aria-label="Connection code">
+            <button class="btn btn-primary btn-block" id="joinBtn" type="submit">Connect</button>
+          </form>
+          <p class="panel-hint tiny" id="recvError" hidden></p>
         </div>
 
-        <div class="stage" id="recvStageDone" hidden>
+        <div class="stage" id="recvStageLinked" hidden>
           <div class="linked-note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
             <div>
-              <p class="linked-title">Invite accepted</p>
-              <p class="linked-sub">Reply code generated. Hand it back to the sender.</p>
+              <p class="linked-title">Devices linked</p>
+              <p class="linked-sub">Connected directly and encrypted. Incoming files appear below.</p>
             </div>
           </div>
-        </div>
-      </article>
-
-      <article class="panel" id="recvAnswerPanel" hidden>
-        <header class="panel-head">
-          <span class="step-badge">2</span>
-          <h3>Send your reply back</h3>
-        </header>
-        <p class="panel-hint">Show this to the sending device — it's the last step before the link opens.</p>
-        <div class="qr-frame">
-          <canvas class="qr-canvas" id="answerQr" aria-label="QR code containing your reply"></canvas>
-          <p class="qr-fallback" id="answerQrFallback" hidden></p>
-        </div>
-        <details class="code-details">
-          <summary>Can't scan? Copy the reply text</summary>
-          <textarea class="code-box" id="answerOut" readonly rows="4" spellcheck="false"></textarea>
-          <div class="code-actions">
-            <button class="btn btn-quiet btn-sm" data-copy="#answerOut" type="button">Copy reply</button>
-          </div>
-        </details>
-        <div class="waiting-line" id="recvWaiting">
-          <span class="spinner" aria-hidden="true"></span>
-          <span>Waiting for the sender to read your reply…</span>
         </div>
       </article>
     </div>
 
     <article class="panel panel-wide" id="recvTransferPanel" hidden>
       <header class="panel-head">
-        <span class="step-badge">3</span>
+        <span class="step-badge">2</span>
         <h3>Incoming files</h3>
         <button class="btn btn-danger btn-sm panel-head-action" id="cancelRecvBtn" type="button" hidden>Cancel</button>
       </header>
       <ul class="transfer-list" id="recvTransfers"></ul>
-      <p class="panel-hint tiny" id="recvIdleHint">Nothing yet — files will appear here the moment the sender starts.</p>
+      <p class="panel-hint tiny" id="recvIdleHint">Nothing yet — files appear here as soon as the sender starts.</p>
     </article>
   </section>
 
 </main>
 
 <footer class="site-footer">
-  <p>Everything runs in your browser. Files are never uploaded — they move directly between the two devices, encrypted by WebRTC.</p>
+  <p>
+    Files move directly between the two devices, encrypted by WebRTC. The code is used only to introduce
+    them — the handshake is encrypted with the code itself, and no file data ever passes through a server.
+  </p>
 </footer>
 
-<!-- ═══════════════════ QR SCANNER MODAL ═══════════════════ -->
-<div class="modal" id="scanModal" hidden role="dialog" aria-modal="true" aria-labelledby="scanTitle">
-  <div class="modal-backdrop" data-close-modal></div>
-  <div class="modal-card">
-    <header class="modal-head">
-      <h3 id="scanTitle">Scan QR code</h3>
-      <button class="btn btn-icon" id="scanCloseBtn" type="button" aria-label="Close scanner">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </header>
-    <div class="scan-stage">
-      <video id="scanVideo" playsinline muted></video>
-      <div class="scan-reticle" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-    </div>
-    <p class="scan-hint" id="scanHint">Point the camera at the code.</p>
-    <div class="btn-row">
-      <select class="select" id="cameraSelect" aria-label="Camera" hidden></select>
-    </div>
-  </div>
-</div>
-
-<!-- Toasts -->
 <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
 <script src="script.js"></script>
