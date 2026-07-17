@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <meta name="description" content="Send files directly between two devices. Files move peer-to-peer over an encrypted connection and are never uploaded to a server.">
 <meta name="robots" content="noindex">
-<title>Beam — send files between devices</title>
+<title>Beam - send files between devices</title>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
 </head>
@@ -34,7 +34,7 @@
     <div class="hero">
       <h1 id="home-title" class="hero-title">Send files between two devices</h1>
       <p class="hero-sub">
-        Share a six-character code, then files go straight from one browser to the other, encrypted.
+        Share a nine-character code, then files go straight from one browser to the other, encrypted.
         Nothing is uploaded to a server.
       </p>
     </div>
@@ -86,7 +86,7 @@
 
     <div class="panel-grid">
 
-      <!-- Step 1 — files -->
+      <!-- Step 1 - files -->
       <article class="panel" id="sendFilesPanel">
         <header class="panel-head">
           <span class="step-badge">1</span>
@@ -99,7 +99,7 @@
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5-5 5 5"/><path d="M12 5v12"/>
           </svg>
           <p class="dz-title">Drop files here</p>
-          <p class="dz-sub">or <span class="dz-link">browse your device</span> — multiple files welcome</p>
+          <p class="dz-sub">or <span class="dz-link">browse your device</span> - multiple files welcome</p>
           <input type="file" id="fileInput" multiple hidden>
         </div>
 
@@ -112,11 +112,11 @@
         <div class="message-block">
           <label class="message-label" for="messageInput">Message (optional)</label>
           <textarea class="message-input" id="messageInput" rows="3"
-                    placeholder="Type or paste text — a link, a note, anything"></textarea>
+                    placeholder="Type or paste text - a link, a note, anything"></textarea>
         </div>
       </article>
 
-      <!-- Step 2 — code -->
+      <!-- Step 2 - code -->
       <article class="panel" id="sendCodePanel">
         <header class="panel-head">
           <span class="step-badge">2</span>
@@ -143,7 +143,7 @@
 
           <div class="qr-block" id="sendQr" hidden>
             <div class="qr-divider"><span>or scan to connect</span></div>
-            <div class="qr-canvas" id="qrCanvas" role="img" aria-label="QR code — scan from the other device to connect"></div>
+            <div class="qr-canvas" id="qrCanvas" role="img" aria-label="QR code - scan from the other device to connect"></div>
             <p class="panel-hint tiny">On the other device: tap <strong>Receive files → Scan QR code</strong>, then point it at this square. It connects on its own.</p>
           </div>
 
@@ -204,7 +204,7 @@
         </header>
 
         <div class="stage" id="recvStageCode">
-          <p class="panel-hint">Type the six characters shown on the sending device.</p>
+          <p class="panel-hint">Type the nine characters shown on the sending device.</p>
           <form id="codeForm" autocomplete="off">
             <input class="code-input" id="codeInput" type="text" inputmode="text"
                    autocapitalize="characters" autocorrect="off" spellcheck="false"
@@ -242,7 +242,7 @@
         <button class="btn btn-danger btn-sm panel-head-action" id="cancelRecvBtn" type="button" hidden>Cancel</button>
       </header>
       <ul class="transfer-list" id="recvTransfers"></ul>
-      <p class="panel-hint tiny" id="recvIdleHint">Nothing yet — files appear here as soon as the sender starts.</p>
+      <p class="panel-hint tiny" id="recvIdleHint">Nothing yet - files appear here as soon as the sender starts.</p>
     </article>
   </section>
 
@@ -251,7 +251,7 @@
 <footer class="site-footer">
   <p>
     Files move directly between the two devices, encrypted by WebRTC. The code is used only to introduce
-    them — the handshake is encrypted with the code itself, and no file data ever passes through a server.
+    them - the handshake is encrypted with the code itself, and no file data ever passes through a server.
   </p>
 </footer>
 

@@ -1,20 +1,20 @@
 /* ==========================================================================
-   Beam — peer-to-peer file transfer
+   Beam - peer-to-peer file transfer
    --------------------------------------------------------------------------
    A single-page, dependency-free WebRTC file transfer app.
 
    There is no backend. Two peers meet using a short code: both sides derive a
    secret topic and an encryption key from it, swap an encrypted WebRTC
    handshake through a public broker, and then talk directly. The broker only
-   ever relays two short ciphertexts — files always move peer to peer.
+   ever relays two short ciphertexts - files always move peer to peer.
 
    Module map:
-     Util        — DOM helpers, formatting, toasts
-     Rendezvous  — short codes, key derivation, encrypted broker transport
-     Signal      — SDP <-> compact handshake token
-     Peer        — RTCPeerConnection lifecycle
-     Transfer    — chunked file send/receive with backpressure
-     App         — UI wiring
+     Util        - DOM helpers, formatting, toasts
+     Rendezvous  - short codes, key derivation, encrypted broker transport
+     Signal      - SDP <-> compact handshake token
+     Peer        - RTCPeerConnection lifecycle
+     Transfer    - chunked file send/receive with backpressure
+     App         - UI wiring
    ========================================================================== */
 
 'use strict';
@@ -35,7 +35,7 @@ const Util = (() => {
 
   /** Human-readable byte count (decimal units, matching OS file managers). */
   const formatBytes = (bytes) => {
-    if (!Number.isFinite(bytes) || bytes < 0) return '—';
+    if (!Number.isFinite(bytes) || bytes < 0) return '-';
     if (bytes < 1000) return `${bytes} B`;
     const units = ['KB', 'MB', 'GB', 'TB'];
     let value = bytes / 1000;
@@ -47,11 +47,11 @@ const Util = (() => {
   const formatSpeed = (bytesPerSecond) =>
     Number.isFinite(bytesPerSecond) && bytesPerSecond > 0
       ? `${formatBytes(bytesPerSecond)}/s`
-      : '—';
+      : '-';
 
   /** Seconds -> "1m 20s" / "45s" / "1h 4m". */
   const formatDuration = (seconds) => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '—';
+    if (!Number.isFinite(seconds) || seconds < 0) return '-';
     if (seconds < 1) return 'less than a second';
     const s = Math.round(seconds);
     if (s < 60) return `${s}s`;
@@ -221,7 +221,7 @@ const Util = (() => {
   };
 
   const vibrate = (pattern) => {
-    try { navigator.vibrate?.(pattern); } catch { /* not supported — ignore */ }
+    try { navigator.vibrate?.(pattern); } catch { /* not supported - ignore */ }
   };
 
   return {
@@ -233,7 +233,7 @@ const Util = (() => {
 })();
 
 /* ==========================================================================
-   Rendezvous — short-code introductions over a public broker
+   Rendezvous - short-code introductions over a public broker
 
    WebRTC needs both peers to swap an SDP before they can talk, and that swap
    has to happen somewhere. Typing ~120 characters by hand is miserable, so the
@@ -248,7 +248,7 @@ const Util = (() => {
    connect directly.
 
    Security note: a 9-character code is ~45 bits. That is deliberately not
-   strong enough to protect a long-lived secret, and it doesn't have to be —
+   strong enough to protect a long-lived secret, and it doesn't have to be -
    an attacker must first find the topic, which means guessing online against
    a rate-limited broker during the ~30 seconds a session is live before the
    code expires. PBKDF2 with a high iteration count makes each guess expensive.
@@ -258,7 +258,7 @@ const Rendezvous = (() => {
   const BROKER = 'https://ntfy.sh';
 
   // Crockford-style alphabet: no I, L, O or U, so codes can't be misread or
-  // accidentally spell anything. 32 chars divides 256 evenly — no modulo bias.
+  // accidentally spell anything. 32 chars divides 256 evenly - no modulo bias.
   const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   const CODE_LENGTH = 9;
 
@@ -461,13 +461,13 @@ const Rendezvous = (() => {
 })();
 
 /* ==========================================================================
-   Signal — SDP <-> compact handshake token
+   Signal - SDP <-> compact handshake token
 
    A browser's SDP offer is ~3 KB, almost all of it boilerplate both peers
    already agree on. Only a few fields actually vary, and most of those are
    incompressible random bytes (the DTLS fingerprint, the ICE password), so
    generic compression buys nothing. Instead we pack the fields into a binary
-   record and base64url it — that gets a typical offer to ~120 characters,
+   record and base64url it - that gets a typical offer to ~120 characters,
    which keeps the QR sparse enough to scan comfortably.
 
    Wire format (after the "B" prefix, base64url-encoded):
@@ -656,7 +656,7 @@ const Signal = (() => {
       w.raw(ip6); w.u16(port); return;
     }
 
-    // Unknown address shape (e.g. a non-UUID .local name) — store it verbatim.
+    // Unknown address shape (e.g. a non-UUID .local name) - store it verbatim.
     w.u8(KIND.GENERIC);
     w.u8(TYPE_CODES.indexOf(type));
     w.ascii(addr);
@@ -795,7 +795,7 @@ const Signal = (() => {
     if (hash >= 0 && /^https?:/i.test(text)) text = text.slice(hash + 1);
     text = text.replace(/^[?#]?(?:c=)?/, '').replace(/\s+/g, '');
 
-    if (!text) throw new Error('Nothing to read — the code is empty.');
+    if (!text) throw new Error('Nothing to read - the code is empty.');
     if (text[0] !== PREFIX) {
       throw new Error('That does not look like a Beam code. Make sure you copied the whole thing.');
     }
@@ -820,11 +820,11 @@ const Signal = (() => {
 })();
 
 /* ==========================================================================
-   Peer — RTCPeerConnection lifecycle
+   Peer - RTCPeerConnection lifecycle
    ========================================================================== */
 const Peer = (() => {
   // Public STUN only. It learns your public IP:port so two devices on
-  // different networks can find each other — it never sees file data, and
+  // different networks can find each other - it never sees file data, and
   // LAN-to-LAN transfers work even if it is unreachable.
   const ICE_SERVERS = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
@@ -965,7 +965,7 @@ const Peer = (() => {
 })();
 
 /* ==========================================================================
-   Transfer — chunked send/receive with backpressure
+   Transfer - chunked send/receive with backpressure
    ========================================================================== */
 const Transfer = (() => {
   // 16 KB is the largest chunk every browser accepts on an SCTP data channel.
@@ -974,7 +974,7 @@ const Transfer = (() => {
   const BUFFER_HIGH = 1024 * 1024;
   const BUFFER_LOW = 256 * 1024;
   // Coalesce received chunks into a Blob every 8 MB so the JS heap stays flat
-  // on multi-hundred-MB files — Blob parts are backed by browser storage.
+  // on multi-hundred-MB files - Blob parts are backed by browser storage.
   const COALESCE_BYTES = 8 * 1024 * 1024;
 
   const MSG = {
@@ -1284,7 +1284,7 @@ const Transfer = (() => {
           }
 
           // Right length, wrong bytes is the failure that produces a file which
-          // half-works — say so instead of handing over a broken video.
+          // half-works - say so instead of handing over a broken video.
           if (typeof msg.crc === 'number' && msg.crc !== file.checksum) {
             this.handlers.onProgress?.(file.id, {
               received: file.size, total: file.size, state: 'error',
@@ -1327,7 +1327,7 @@ const Transfer = (() => {
 
     _handleChunk(data) {
       const file = this.current;
-      if (!file || this.cancelled) return;                   // stray chunk — ignore
+      if (!file || this.cancelled) return;                   // stray chunk - ignore
 
       const buffer = data instanceof ArrayBuffer ? data : null;
       if (!buffer) return;
@@ -1362,7 +1362,7 @@ const Transfer = (() => {
 })();
 
 /* ==========================================================================
-   App — UI wiring
+   App - UI wiring
    ========================================================================== */
 const App = (() => {
   const { $, el } = Util;
@@ -1484,7 +1484,7 @@ const App = (() => {
     for (const file of incoming) {
       // Directories dropped into the zone arrive as zero-byte, type-less entries.
       if (file.size === 0 && !file.type) {
-        Util.toast(`"${file.name}" looks like a folder or an empty file — skipped.`, 'warn');
+        Util.toast(`"${file.name}" looks like a folder or an empty file - skipped.`, 'warn');
         continue;
       }
       const duplicate = state.files.some(
@@ -1621,7 +1621,7 @@ const App = (() => {
   /**
    * Offer the ways this platform can actually keep a received file.
    *
-   * A download link can't reach the iOS photo library — Safari files downloads
+   * A download link can't reach the iOS photo library - Safari files downloads
    * away in the Files app. The native share sheet is the only route to "Save
    * Image"/"Save Video", so when the platform can share the file we lead with
    * that, and keep the plain download as a fallback everywhere.
@@ -1631,7 +1631,7 @@ const App = (() => {
    *
    * Two reasons beyond looking nice: it proves at a glance whether the file
    * actually decodes, and on iOS a long-press on an image offers "Add to
-   * Photos" while the video player's own share button offers "Save Video" —
+   * Photos" while the video player's own share button offers "Save Video" -
    * both independent of the share button below.
    */
   function addMediaPreview(row, url, mime) {
@@ -1660,7 +1660,7 @@ const App = (() => {
     addMediaPreview(row, url, mime);
 
     // Give the File a real extension so iOS recognises it as media and offers
-    // "Save Video"/"Save Image" in the share sheet — the only route a web page
+    // "Save Video"/"Save Image" in the share sheet - the only route a web page
     // has to the Photos library. Without this, an ".mp4"-less name lands in
     // Files instead.
     const media = Util.isSaveableMedia(mime);
@@ -1671,7 +1671,7 @@ const App = (() => {
     // sharing (the sheet appears and "Save Video" seems to work, but Photos
     // gets a broken or empty clip). Re-fetching the object URL collapses it
     // into one contiguous blob, which saves reliably. We do this now, ahead of
-    // the tap — navigator.share must run synchronously inside the click, so any
+    // the tap - navigator.share must run synchronously inside the click, so any
     // await immediately before it makes iOS reject the share.
     let shareFile = new File([blob], saveName, { type: mime });
     fetch(url)
@@ -1693,7 +1693,7 @@ const App = (() => {
       btn.appendChild(document.createTextNode(media ? 'Save to Photos' : 'Share'));
       btn.addEventListener('click', async () => {
         try {
-          // Must stay inside the user gesture — no awaits before this call.
+          // Must stay inside the user gesture - no awaits before this call.
           await navigator.share({ files: [shareFile] });
         } catch (err) {
           // Dismissing the sheet is normal, not a failure worth reporting.
@@ -1739,7 +1739,7 @@ const App = (() => {
     copy.textContent = 'Copy';
     copy.addEventListener('click', async () => {
       const ok = await Util.copyText(body);
-      Util.toast(ok ? 'Copied.' : 'Could not copy — select the text instead.', ok ? 'ok' : 'warn', 2500);
+      Util.toast(ok ? 'Copied.' : 'Could not copy - select the text instead.', ok ? 'ok' : 'warn', 2500);
     });
     actions.appendChild(copy);
 
@@ -1873,12 +1873,12 @@ const App = (() => {
         const answer = await Rendezvous.unseal(session, Rendezvous.ROLE_ANSWER, payload);
         if (!answer) return;
         accepted = true;
-        stopCodeCountdown();            // the code has been used — stop expiring it
+        stopCodeCountdown();            // the code has been used - stop expiring it
         state.unsubscribe?.();
         state.unsubscribe = null;
         try {
           setStatus('connecting');
-          $('#sendWaitingText').textContent = 'Someone answered — connecting…';
+          $('#sendWaitingText').textContent = 'Someone answered - connecting…';
           await state.connection.acceptAnswer(answer);
         } catch (err) {
           setStatus('error');
@@ -2085,7 +2085,7 @@ const App = (() => {
       onFileComplete: (id, blob, name, mime) => {
         state.recvFileCount++;
         addSaveActions(id, blob, name, mime);
-        Util.toast(`"${name}" received — ${Util.formatBytes(blob.size)}.`, 'ok', 5000);
+        Util.toast(`"${name}" received - ${Util.formatBytes(blob.size)}.`, 'ok', 5000);
         Util.vibrate([40, 60, 40]);
       },
       onAllDone: () => {
@@ -2109,7 +2109,7 @@ const App = (() => {
   /**
    * Render the code as a QR into the send screen, or hide the block if we can't.
    *
-   * The QR carries the bare code — not a URL — on purpose: scanning it with the
+   * The QR carries the bare code - not a URL - on purpose: scanning it with the
    * website's own scanner reads the code and connects in place, and scanning it
    * with a phone's native camera does nothing intrusive (no link to open). The
    * receiving device is expected to already have Beam open.
@@ -2125,7 +2125,7 @@ const App = (() => {
       const qr = qrcode(0, 'M');                 // 0 = smallest fitting version, M = ~15% ECC
       qr.addData(code);
       qr.make();
-      // Scalable SVG: crisp at any size, sized by CSS. margin 0 — the white
+      // Scalable SVG: crisp at any size, sized by CSS. margin 0 - the white
       // .qr-canvas padding already provides the quiet zone scanners need.
       canvas.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
       wrap.hidden = false;
@@ -2233,9 +2233,9 @@ const App = (() => {
           if (raw) {
             const code = codeFromText(raw);
             if (code) { finish(code); return; }
-            hint.textContent = 'That QR isn’t a Beam invite — keep the camera steady…';
+            hint.textContent = 'That QR isn’t a Beam invite - keep the camera steady…';
           }
-        } catch { /* transient decode error — try the next frame */ }
+        } catch { /* transient decode error - try the next frame */ }
       }
       if (!session.done && state.scan === session) session.raf = requestAnimationFrame(tick);
     };
@@ -2352,7 +2352,7 @@ const App = (() => {
 
     $('#copyCodeBtn').addEventListener('click', async () => {
       const ok = await Util.copyText($('#codeValue').textContent);
-      Util.toast(ok ? 'Code copied.' : 'Could not copy — read it out instead.', ok ? 'ok' : 'warn', 2500);
+      Util.toast(ok ? 'Code copied.' : 'Could not copy - read it out instead.', ok ? 'ok' : 'warn', 2500);
     });
   }
 
