@@ -624,6 +624,19 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .dl-quiet { color: var(--muted); }
 .dl-quiet:hover { border-color: var(--border-hi); }
 
+/* Media preview ------------------------------------------------------------- */
+.media-preview {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  margin-top: 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: #000;
+  /* Letterbox rather than crop: this is a check that the file decoded. */
+  object-fit: contain;
+}
+
 /* Text messages ------------------------------------------------------------- */
 .text-body {
   margin: 0;

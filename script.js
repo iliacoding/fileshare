@@ -968,6 +968,31 @@ const Transfer = (() => {
   // either a mistake or someone poking at us.
   const MAX_TEXT_LENGTH = 100000;
 
+  /* ---- integrity ---- */
+
+  // A matching byte count says nothing about whether the bytes are right, and a
+  // subtly corrupt video fails in confusing ways (audio plays, picture doesn't)
+  // rather than failing loudly. CRC-32 is cheap, runs incrementally over each
+  // chunk, and turns that into an error we can actually report.
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[i] = c >>> 0;
+    }
+    return table;
+  })();
+
+  /** Continue a CRC-32 over another slice of bytes. */
+  function crc32(bytes, previous = 0) {
+    let c = (previous ^ 0xffffffff) >>> 0;
+    for (let i = 0; i < bytes.length; i++) {
+      c = (CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)) >>> 0;
+    }
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
   /** Exponential moving average of throughput, plus an ETA. */
   class RateMeter {
     constructor() {
@@ -1093,6 +1118,7 @@ const Transfer = (() => {
       });
 
       let offset = 0;
+      let checksum = 0;
       while (offset < file.size) {
         if (this.cancelled) {
           this.handlers.onProgress?.(id, { sent: offset, total: file.size, state: 'cancelled' });
@@ -1120,6 +1146,7 @@ const Transfer = (() => {
         } catch {
           throw new Error('The connection closed mid-transfer.');
         }
+        checksum = crc32(new Uint8Array(buffer), checksum);
         offset += buffer.byteLength;
 
         const speed = meter.update(offset);
@@ -1132,7 +1159,7 @@ const Transfer = (() => {
         });
       }
 
-      this._send({ type: MSG.END, id });
+      this._send({ type: MSG.END, id, crc: checksum });
 
       // Wait for the receiver to confirm it assembled the whole file.
       await new Promise((resolve) => {
@@ -1205,6 +1232,7 @@ const Transfer = (() => {
             pending: [],
             pendingBytes: 0,
             blobParts: [],
+            checksum: 0,
             meter: new RateMeter(),
           };
           this.handlers.onFileStart?.(this.current.id, {
@@ -1229,6 +1257,18 @@ const Transfer = (() => {
             });
             this.handlers.onError?.(new Error(
               `"${file.name}" arrived incomplete (${Util.formatBytes(blob.size)} of ${Util.formatBytes(file.size)}).`,
+            ));
+            return;
+          }
+
+          // Right length, wrong bytes is the failure that produces a file which
+          // half-works — say so instead of handing over a broken video.
+          if (typeof msg.crc === 'number' && msg.crc !== file.checksum) {
+            this.handlers.onProgress?.(file.id, {
+              received: file.size, total: file.size, state: 'error',
+            });
+            this.handlers.onError?.(new Error(
+              `"${file.name}" arrived corrupted and was not saved. Try sending it again.`,
             ));
             return;
           }
@@ -1273,6 +1313,7 @@ const Transfer = (() => {
       file.pending.push(buffer);
       file.pendingBytes += buffer.byteLength;
       file.received += buffer.byteLength;
+      file.checksum = crc32(new Uint8Array(buffer), file.checksum);
 
       if (file.pendingBytes >= COALESCE_BYTES) this._flush(file);
 
@@ -1557,9 +1598,38 @@ const App = (() => {
    * Image"/"Save Video", so when the platform can share the file we lead with
    * that, and keep the plain download as a fallback everywhere.
    */
+  /**
+   * Show received media inline.
+   *
+   * Two reasons beyond looking nice: it proves at a glance whether the file
+   * actually decodes, and on iOS a long-press on an image offers "Add to
+   * Photos" while the video player's own share button offers "Save Video" —
+   * both independent of the share button below.
+   */
+  function addMediaPreview(row, url, mime) {
+    if (/^image\//.test(mime)) {
+      const img = el('img', 'media-preview');
+      img.src = url;
+      img.alt = '';
+      row.root.insertBefore(img, row.actions);
+    } else if (/^video\//.test(mime)) {
+      const video = document.createElement('video');
+      video.className = 'media-preview';
+      video.src = url;
+      video.controls = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      row.root.insertBefore(video, row.actions);
+    }
+  }
+
   function addSaveActions(id, blob, name, mime) {
     const row = state.rows.get(id);
     if (!row) return;
+
+    const url = URL.createObjectURL(blob);
+    state.objectUrls.push(url);
+    addMediaPreview(row, url, mime);
 
     const file = new File([blob], name, { type: mime });
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
@@ -1584,8 +1654,6 @@ const App = (() => {
       row.actions.appendChild(btn);
     }
 
-    const url = URL.createObjectURL(blob);
-    state.objectUrls.push(url);
     const link = el('a', canShare ? 'dl-link dl-quiet' : 'dl-link');
     link.href = url;
     link.download = name;
