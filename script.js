@@ -92,6 +92,26 @@ const Util = (() => {
 
   const isSaveableMedia = (mime) => /^(image|video)\//.test(mime || '');
 
+  // Reverse of MIME_BY_EXT, first-wins, for putting a sensible extension back
+  // on a name that lost one. iOS decides whether the share sheet shows "Save
+  // Video"/"Save Image" from the file's type AND its extension, so a video
+  // named "clip" with no ".mp4" quietly loses the Photos option.
+  const EXT_BY_MIME = (() => {
+    const out = {};
+    for (const [ext, mime] of Object.entries(MIME_BY_EXT)) {
+      if (!(mime in out)) out[mime] = ext;
+    }
+    return out;
+  })();
+
+  /** Guarantee the name ends in an extension matching its media type. */
+  const ensureExt = (name, mime) => {
+    const safe = String(name || 'file');
+    if (/\.[A-Za-z0-9]{1,5}$/.test(safe)) return safe;   // already has one
+    const ext = EXT_BY_MIME[mime];
+    return ext ? `${safe}.${ext}` : safe;
+  };
+
   /** A message that is exactly one http(s) link, or null. */
   const asSingleUrl = (text) => {
     const trimmed = String(text).trim();
@@ -206,7 +226,7 @@ const Util = (() => {
 
   return {
     $, $$, el, formatBytes, formatSpeed, formatDuration, fileExt, sanitizeFilename,
-    guessMime, isSaveableMedia, asSingleUrl,
+    guessMime, isSaveableMedia, ensureExt, asSingleUrl,
     bytesToBase64Url, base64UrlToBytes, bytesToBase64, base64ToBytes,
     toast, copyText, readClipboard, vibrate,
   };
@@ -1360,6 +1380,7 @@ const App = (() => {
     waitTimer: 0,
     recvFileCount: 0,
     recvTextCount: 0,
+    scan: null,          // active camera scan session, see openScanner()
   };
 
   let fileSeq = 0;
@@ -1403,6 +1424,7 @@ const App = (() => {
 
   /** Drop the connection, stop listening, and reset all per-session UI. */
   function teardown() {
+    closeScanner();
     state.unsubscribe?.();
     state.unsubscribe = null;
     clearTimeout(state.waitTimer);
@@ -1432,6 +1454,8 @@ const App = (() => {
     $('#createCodeBtn').disabled = false;
     $('#createCodeBtn').textContent = 'Get a code';
     $('#codeValue').textContent = '···-···';
+    $('#sendQr').hidden = true;
+    $('#qrCanvas').textContent = '';
     $('#sendWaiting').hidden = false;
 
     // Receive screen.
@@ -1631,32 +1655,49 @@ const App = (() => {
     state.objectUrls.push(url);
     addMediaPreview(row, url, mime);
 
-    const file = new File([blob], name, { type: mime });
-    const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+    // Give the File a real extension so iOS recognises it as media and offers
+    // "Save Video"/"Save Image" in the share sheet — the only route a web page
+    // has to the Photos library. Without this, an ".mp4"-less name lands in
+    // Files instead.
+    const media = Util.isSaveableMedia(mime);
+    const saveName = Util.ensureExt(name, mime);
+    const file = new File([blob], saveName, { type: mime });
 
-    if (canShare) {
-      const media = Util.isSaveableMedia(mime);
+    // Show the share button whenever the browser has Web Share. When canShare
+    // exists we trust it; when it doesn't (older Safari), we still offer the
+    // button rather than hiding the only path to Photos.
+    const shareSupported = typeof navigator.share === 'function'
+      && (!navigator.canShare || navigator.canShare({ files: [file] }));
+
+    if (shareSupported) {
       const btn = el('button', 'dl-link');
       btn.type = 'button';
       btn.innerHTML = ICON_SHARE;
       btn.appendChild(document.createTextNode(media ? 'Save to Photos' : 'Share'));
       btn.addEventListener('click', async () => {
         try {
-          // Must stay inside the user gesture, so no awaits before this.
+          // Must stay inside the user gesture — no awaits before this call.
           await navigator.share({ files: [file] });
         } catch (err) {
           // Dismissing the sheet is normal, not a failure worth reporting.
           if (err && err.name !== 'AbortError') {
-            Util.toast('This device would not open the share sheet. Use Save instead.', 'warn', 5000);
+            Util.toast(
+              media
+                ? 'Could not open the share sheet. Long-press the preview above and choose “Add to Photos”, or use Save.'
+                : 'Could not open the share sheet. Use Save instead.',
+              'warn', 6000,
+            );
           }
         }
       });
       row.actions.appendChild(btn);
     }
 
-    const link = el('a', canShare ? 'dl-link dl-quiet' : 'dl-link');
+    // Plain download. On iOS this reaches Files, not Photos, so it stays the
+    // quiet fallback next to the share button.
+    const link = el('a', shareSupported ? 'dl-link dl-quiet' : 'dl-link');
     link.href = url;
-    link.download = name;
+    link.download = saveName;
     link.innerHTML = ICON_DOWNLOAD;
     link.appendChild(document.createTextNode('Save'));
     row.actions.appendChild(link);
@@ -1740,6 +1781,7 @@ const App = (() => {
       await Rendezvous.publish(session, await Rendezvous.seal(session, Rendezvous.ROLE_OFFER, offer));
 
       $('#codeValue').textContent = Rendezvous.formatCode(code);
+      renderSendQr(code);
       $('#sendStageStart').hidden = true;
       $('#sendStageCode').hidden = false;
       setStatus('waiting');
@@ -1981,6 +2023,175 @@ const App = (() => {
     });
   }
 
+  /* ---- QR: show on send, scan on receive ---- */
+
+  /**
+   * A scannable deep link that carries the connection code in its fragment.
+   * Opening it (native camera or in-app scanner) lands on the receive screen
+   * and connects on its own — see the auto-connect check in init().
+   */
+  function connectUrl(code) {
+    let base;
+    try {
+      base = location.origin && location.origin !== 'null'
+        ? location.origin + location.pathname
+        : location.href.split(/[#?]/)[0];
+    } catch {
+      base = location.href.split(/[#?]/)[0];
+    }
+    return `${base}#r=${code}`;
+  }
+
+  /** Render the code as a QR into the send screen, or hide the block if we can't. */
+  function renderSendQr(code) {
+    const wrap = $('#sendQr');
+    const canvas = $('#qrCanvas');
+    if (!wrap || !canvas) return;
+    canvas.textContent = '';
+
+    if (typeof qrcode === 'undefined') { wrap.hidden = true; return; }
+    try {
+      const qr = qrcode(0, 'M');                 // 0 = smallest fitting version, M = ~15% ECC
+      qr.addData(connectUrl(code));
+      qr.make();
+      // Scalable SVG: crisp at any size, sized by CSS. margin 0 — the white
+      // .qr-canvas padding already provides the quiet zone scanners need.
+      canvas.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+      wrap.hidden = false;
+    } catch {
+      wrap.hidden = true;
+    }
+  }
+
+  /** Pull a valid connection code out of scanned text or a scanned URL. */
+  function codeFromText(text) {
+    const s = String(text || '').trim();
+    if (!s) return null;
+    // URL form: ...#r=CODE, ?code=CODE, &r=CODE. Otherwise treat it as a code.
+    const m = s.match(/[?#&](?:r|code)=([0-9a-z]+)/i);
+    const raw = m ? m[1] : s;
+    const code = Rendezvous.normalizeCode(raw).slice(0, Rendezvous.CODE_LENGTH);
+    return Rendezvous.isValidCode(code) ? code : null;
+  }
+
+  /** A pending code sitting in the current URL (e.g. from a scanned link). */
+  function pendingCodeFromLocation() {
+    return codeFromText(`${location.search}${location.hash}`);
+  }
+
+  async function openScanner() {
+    if (state.scan) return;                                  // already scanning
+    const overlay = $('#scanner');
+    const video = $('#scanVideo');
+    const hint = $('#scanHint');
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      Util.toast('This browser can’t open the camera here. Type the code instead.', 'warn', 5000);
+      return;
+    }
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+    } catch (err) {
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      Util.toast(
+        denied
+          ? 'Camera access was blocked. Allow it in your browser settings, or type the code.'
+          : 'Could not start the camera. Type the code instead.',
+        'warn', 6000,
+      );
+      return;
+    }
+
+    const session = { stream, raf: 0, detector: null, canvas: null, ctx: null, done: false };
+    state.scan = session;
+
+    overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    hint.textContent = 'Point the camera at the code on the other device.';
+
+    video.srcObject = stream;
+    // iOS needs an explicit play() after setting srcObject; ignore autoplay
+    // rejections since the frame loop reads the video regardless.
+    try { await video.play(); } catch { /* keep going */ }
+
+    // BarcodeDetector is fast and native where present (Chrome/Android). Safari
+    // lacks it, so fall back to the bundled jsQR decoder over canvas frames.
+    if ('BarcodeDetector' in window) {
+      try { session.detector = new window.BarcodeDetector({ formats: ['qr_code'] }); }
+      catch { session.detector = null; }
+    }
+
+    const finish = (code) => {
+      if (session.done) return;
+      session.done = true;
+      closeScanner();
+      $('#codeInput').value = Rendezvous.formatCode(code);
+      Util.vibrate(40);
+      joinWithCode();
+    };
+
+    const tick = async () => {
+      if (session.done || state.scan !== session) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        try {
+          let raw = null;
+
+          if (session.detector) {
+            const found = await session.detector.detect(video);
+            if (found && found.length) raw = found[0].rawValue;
+          } else if (typeof jsQR === 'function') {
+            if (!session.canvas) {
+              session.canvas = document.createElement('canvas');
+              session.ctx = session.canvas.getContext('2d', { willReadFrequently: true });
+            }
+            const w = video.videoWidth, h = video.videoHeight;
+            session.canvas.width = w;
+            session.canvas.height = h;
+            session.ctx.drawImage(video, 0, 0, w, h);
+            const frame = session.ctx.getImageData(0, 0, w, h);
+            const result = jsQR(frame.data, w, h, { inversionAttempts: 'dontInvert' });
+            if (result) raw = result.data;
+          }
+
+          if (raw) {
+            const code = codeFromText(raw);
+            if (code) { finish(code); return; }
+            hint.textContent = 'That QR isn’t a Beam invite — keep the camera steady…';
+          }
+        } catch { /* transient decode error — try the next frame */ }
+      }
+      if (!session.done && state.scan === session) session.raf = requestAnimationFrame(tick);
+    };
+    session.raf = requestAnimationFrame(tick);
+  }
+
+  function closeScanner() {
+    const session = state.scan;
+    const overlay = $('#scanner');
+    const video = $('#scanVideo');
+
+    if (session) {
+      cancelAnimationFrame(session.raf);
+      try { session.stream.getTracks().forEach((t) => t.stop()); } catch { /* already stopped */ }
+      state.scan = null;
+    }
+    if (video) {
+      try { video.pause(); } catch { /* ignore */ }
+      video.srcObject = null;
+    }
+    if (overlay) {
+      overlay.hidden = true;
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+    document.body.style.overflow = '';
+  }
+
   /* ---- event wiring ---- */
 
   function wireNav() {
@@ -2077,6 +2288,8 @@ const App = (() => {
   function wireActions() {
     $('#createCodeBtn').addEventListener('click', createCode);
     $('#startSendBtn').addEventListener('click', startSending);
+    $('#scanQrBtn').addEventListener('click', openScanner);
+    $('#scanCloseBtn').addEventListener('click', closeScanner);
 
     $('#cancelSendBtn').addEventListener('click', () => {
       state.sender?.cancel();
@@ -2126,6 +2339,20 @@ const App = (() => {
     wireDropzone();
     wireCodeEntry();
     wireActions();
+
+    // Arrived via a scanned invite link (…#r=CODE)? Jump straight to receiving
+    // and connect. Clear the code from the URL first so a refresh doesn't try
+    // to reconnect to a session that's already gone.
+    const pending = pendingCodeFromLocation();
+    if (pending) {
+      try { history.replaceState(null, '', location.pathname); } catch { /* ignore */ }
+      show('#screen-receive');
+      setStatus('idle');
+      $('#codeInput').value = Rendezvous.formatCode(pending);
+      joinWithCode();
+      return;
+    }
+
     show('#screen-home');
     setStatus('idle');
   }

@@ -140,6 +140,13 @@
               </svg>
             </button>
           </div>
+
+          <div class="qr-block" id="sendQr" hidden>
+            <div class="qr-divider"><span>or scan to connect</span></div>
+            <div class="qr-canvas" id="qrCanvas" role="img" aria-label="QR code — scan with the other device's camera to connect"></div>
+            <p class="panel-hint tiny">Point the other phone's camera at this square. It connects on its own.</p>
+          </div>
+
           <div class="waiting-line" id="sendWaiting">
             <span class="spinner" aria-hidden="true"></span>
             <span id="sendWaitingText">Waiting for the other device…</span>
@@ -196,6 +203,15 @@
                    maxlength="7" placeholder="4K9-T2M" aria-label="Connection code">
             <button class="btn btn-primary btn-block" id="joinBtn" type="submit">Connect</button>
           </form>
+
+          <div class="or-line"><span>or</span></div>
+          <button class="btn btn-secondary btn-block" id="scanQrBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+            </svg>
+            Scan QR code
+          </button>
+
           <p class="panel-hint tiny" id="recvError" hidden></p>
         </div>
 
@@ -233,6 +249,23 @@
 
 <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
+<!-- Camera QR scanner (receive side) -->
+<div class="scanner" id="scanner" hidden aria-hidden="true">
+  <div class="scanner-head">
+    <span class="scanner-title">Scan the sender's QR code</span>
+    <button class="btn btn-icon scanner-close" id="scanCloseBtn" type="button" aria-label="Close scanner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="scanner-stage">
+    <video id="scanVideo" playsinline muted></video>
+    <div class="scanner-reticle" aria-hidden="true"></div>
+  </div>
+  <p class="scanner-hint" id="scanHint">Point the camera at the code on the other device.</p>
+</div>
+
+<script src="vendor/qrcode.min.js"></script>
+<script src="vendor/jsqr.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
