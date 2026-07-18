@@ -256,6 +256,30 @@
     </article>
   </section>
 
+  <!-- ═══════════════════ SHARED CLIPBOARD (shown once linked) ═══════════════════ -->
+  <section class="clip-screen" id="clipPanel" hidden aria-labelledby="clip-title">
+    <article class="panel panel-wide">
+      <header class="panel-head">
+        <span class="step-badge clip-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+        </span>
+        <h3 id="clip-title">Shared clipboard</h3>
+        <label class="clip-auto" id="clipAutoWrap" hidden>
+          <input type="checkbox" id="clipAuto" checked>
+          <span>Auto-sync</span>
+        </label>
+      </header>
+      <p class="panel-hint tiny" id="clipHint">Text you copy is shared with the other device.</p>
+      <textarea class="message-input clip-box" id="clipBox" rows="3"
+                placeholder="Type or paste here, then Send - or turn on Auto-sync."></textarea>
+      <div class="clip-actions">
+        <button class="btn btn-primary btn-sm" id="clipSendBtn" type="button">Send clipboard</button>
+        <button class="btn btn-quiet btn-sm" id="clipCopyBtn" type="button" hidden>Copy latest</button>
+        <span class="clip-flash" id="clipFlash" aria-live="polite"></span>
+      </div>
+    </article>
+  </section>
+
 </main>
 
 <footer class="site-footer">

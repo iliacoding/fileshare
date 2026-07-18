@@ -758,6 +758,44 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 
 /* --------------------------------------------------------------------------
+   Shared clipboard
+   -------------------------------------------------------------------------- */
+.clip-screen { margin-top: 12px; }
+.clip-screen[hidden] { display: none; }
+
+.clip-badge { color: var(--accent); }
+.clip-badge svg { width: 13px; height: 13px; }
+
+.clip-auto {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.clip-auto[hidden] { display: none; }
+.clip-auto input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+.clip-box { min-height: 58px; }
+
+.clip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.clip-flash {
+  font-size: 0.78rem;
+  color: var(--ok);
+  margin-left: 2px;
+  min-height: 1em;
+}
+
+/* --------------------------------------------------------------------------
    Toasts
    -------------------------------------------------------------------------- */
 .toast-stack {

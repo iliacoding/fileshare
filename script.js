@@ -1384,6 +1384,13 @@ const App = (() => {
     recvFileCount: 0,
     recvTextCount: 0,
     scan: null,          // active camera scan session, see openScanner()
+    clip: {              // shared-clipboard sync, see the clipboard section
+      last: '',          // last text synced either way — guards against echo loops
+      pendingWrite: null,// received text not yet placed on the OS clipboard
+      focusHandler: null,
+      poll: 0,
+      readBlocked: false,
+    },
   };
 
   let fileSeq = 0;
@@ -1428,6 +1435,7 @@ const App = (() => {
   /** Drop the connection, stop listening, and reset all per-session UI. */
   function teardown() {
     closeScanner();
+    hideClipPanel();
     stopCodeCountdown();
     state.unsubscribe?.();
     state.unsubscribe = null;
@@ -1852,7 +1860,7 @@ const App = (() => {
 
       state.connection = new Peer.Connection(connectionHandlers({
         onOpen: (channel) => onSenderChannelOpen(channel),
-        onMessage: (data) => state.sender?.handleMessage(data),
+        onMessage: (data) => { if (!clipMaybeHandle(data)) state.sender?.handleMessage(data); },
       }));
 
       const offer = await state.connection.createOffer();
@@ -1911,6 +1919,7 @@ const App = (() => {
     $('#sendStageCode').hidden = true;
     $('#sendStageLinked').hidden = false;
     updateSendReady();
+    showClipPanel();
     Util.toast('Connected. You can send now.', 'ok');
   }
 
@@ -2015,7 +2024,7 @@ const App = (() => {
 
       state.connection = new Peer.Connection(connectionHandlers({
         onOpen: (channel) => onReceiverChannelOpen(channel),
-        onMessage: (data) => state.receiver?.handleMessage(data),
+        onMessage: (data) => { if (!clipMaybeHandle(data)) state.receiver?.handleMessage(data); },
       }));
 
       let handled = false;
@@ -2065,6 +2074,7 @@ const App = (() => {
     $('#recvStageCode').hidden = true;
     $('#recvStageLinked').hidden = false;
     $('#recvTransferPanel').hidden = false;
+    showClipPanel();
     Util.toast('Connected. Waiting for files…', 'ok');
 
     state.receiver = new Transfer.Receiver(channel, {
@@ -2102,6 +2112,188 @@ const App = (() => {
       },
       onError: (err) => Util.toast(err.message, 'error', 6000),
     });
+  }
+
+  /* ---- shared clipboard ----------------------------------------------------
+
+     Once the two devices are linked, text copied on one can appear on the
+     other's clipboard. Browsers heavily restrict clipboard access, so this is
+     "as automatic as the platform allows":
+
+       - Desktop (Chrome/Edge): while the Beam tab is focused we can read what
+         you copied and write incoming text straight onto your clipboard, so it
+         is ready for Ctrl/Cmd+V. That is the phone -> PC direction people want.
+       - iOS Safari: the clipboard is only reachable inside an explicit tap, so
+         there it is one tap to send and one tap to copy — no background sync.
+
+     It rides the same encrypted data channel as files, as a {type:'clip'}
+     control frame, and never touches a server.
+     -------------------------------------------------------------------------- */
+
+  const CLIP_MAX = 100000;
+
+  const isApplePlatform = () =>
+    /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
+  const clipCanWrite = () =>
+    !!(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext);
+  const clipCanRead = () =>
+    !!(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext);
+  // Silent background sync is only realistic off iOS, where writes/reads need a tap.
+  const clipAutoCapable = () => !isApplePlatform() && clipCanWrite();
+
+  let clipFlashTimer = 0;
+  function clipFlash(message, warn = false) {
+    const node = $('#clipFlash');
+    if (!node) return;
+    node.textContent = message;
+    node.style.color = warn ? 'var(--warn)' : 'var(--ok)';
+    clearTimeout(clipFlashTimer);
+    clipFlashTimer = setTimeout(() => { node.textContent = ''; }, 4000);
+  }
+
+  /** Route incoming {type:'clip'} frames here instead of to the file transfer. */
+  function clipMaybeHandle(data) {
+    if (typeof data !== 'string') return false;
+    let msg;
+    try { msg = JSON.parse(data); } catch { return false; }
+    if (!msg || msg.type !== 'clip') return false;
+    onClipReceived(typeof msg.body === 'string' ? msg.body : '');
+    return true;
+  }
+
+  function clipSend(text, fromUser = false) {
+    const body = String(text || '').slice(0, CLIP_MAX);
+    if (!body) return;
+    if (body === state.clip.last) { if (fromUser) clipFlash('Already in sync.'); return; }
+
+    const ch = state.connection?.channel;
+    if (!ch || ch.readyState !== 'open') { clipFlash('Not connected.', true); return; }
+    try { ch.send(JSON.stringify({ type: 'clip', body })); }
+    catch { clipFlash('Could not send — the connection may have dropped.', true); return; }
+
+    state.clip.last = body;                                 // remember so we don't echo it back
+    clipFlash('Sent to the other device.');
+  }
+
+  async function clipWrite(text) {
+    if (!clipCanWrite()) return false;
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch { return false; }                                // almost always: tab isn't focused
+  }
+
+  function onClipReceived(text) {
+    const body = String(text || '').slice(0, CLIP_MAX);
+    if (!body) return;
+
+    state.clip.last = body;                                 // guard against echoing it back
+    $('#clipBox').value = body;
+    Util.vibrate(30);
+
+    if (clipAutoCapable() && $('#clipAuto').checked) {
+      clipWrite(body).then((ok) => {
+        if (ok) {
+          state.clip.pendingWrite = null;
+          $('#clipCopyBtn').hidden = true;
+          clipFlash('Copied to your clipboard — paste with Ctrl/Cmd+V.');
+        } else {
+          // Arrived while the tab was in the background; write it on next focus.
+          state.clip.pendingWrite = body;
+          $('#clipCopyBtn').hidden = false;
+          clipFlash('Received — will copy when you return, or tap “Copy latest”.');
+        }
+      });
+    } else {
+      state.clip.pendingWrite = body;
+      $('#clipCopyBtn').hidden = false;
+      clipFlash('New clipboard received — tap “Copy latest”.');
+    }
+  }
+
+  /** True only if clipboard-read is already granted, so we never force a prompt. */
+  async function clipReadGranted() {
+    if (!navigator.permissions || !navigator.permissions.query) return false;
+    try {
+      const p = await navigator.permissions.query({ name: 'clipboard-read' });
+      return p.state === 'granted';
+    } catch { return false; }                              // browser doesn't expose it
+  }
+
+  /** Best-effort: read what the user copied elsewhere and share it. */
+  async function clipReadAndSend() {
+    if (state.clip.readBlocked) return;
+    if (!(clipAutoCapable() && $('#clipAuto').checked && clipCanRead())) return;
+    if (!document.hasFocus()) return;
+    // Don't summon a permission dialog in the background. Auto-read only kicks
+    // in once access is already granted — tapping "Send clipboard" once grants
+    // it through a normal user gesture.
+    if (!(await clipReadGranted())) return;
+    let text;
+    try { text = await navigator.clipboard.readText(); }
+    catch { state.clip.readBlocked = true; return; }       // revoked — stop retrying
+    if (text && text !== state.clip.last) clipSend(text);
+  }
+
+  async function onClipFocus() {
+    // Flush anything that landed while we were in the background.
+    if (state.clip.pendingWrite && clipAutoCapable() && $('#clipAuto').checked) {
+      if (await clipWrite(state.clip.pendingWrite)) {
+        state.clip.pendingWrite = null;
+        $('#clipCopyBtn').hidden = true;
+        clipFlash('Copied — paste with Ctrl/Cmd+V.');
+      }
+    }
+    clipReadAndSend();
+  }
+
+  function startClipAuto() {
+    stopClipAuto();
+    if (!clipAutoCapable()) return;
+    state.clip.focusHandler = () => onClipFocus();
+    window.addEventListener('focus', state.clip.focusHandler);
+    document.addEventListener('visibilitychange', state.clip.focusHandler);
+    // Catch copies made without ever leaving the tab.
+    state.clip.poll = setInterval(() => { if (document.hasFocus()) clipReadAndSend(); }, 1500);
+    onClipFocus();
+  }
+
+  function stopClipAuto() {
+    if (state.clip.focusHandler) {
+      window.removeEventListener('focus', state.clip.focusHandler);
+      document.removeEventListener('visibilitychange', state.clip.focusHandler);
+      state.clip.focusHandler = null;
+    }
+    clearInterval(state.clip.poll);
+    state.clip.poll = 0;
+  }
+
+  function showClipPanel() {
+    const panel = $('#clipPanel');
+    if (!panel) return;
+    panel.hidden = false;
+
+    if (clipAutoCapable()) {
+      $('#clipAutoWrap').hidden = false;
+      $('#clipHint').textContent = 'Incoming text lands on your clipboard automatically — paste with Ctrl/Cmd+V. To share what you copy, tap “Send clipboard” (allow clipboard access once, then it syncs on its own).';
+      startClipAuto();
+    } else {
+      // iOS and anywhere without clipboard write: tap-driven only.
+      $('#clipAutoWrap').hidden = true;
+      $('#clipHint').textContent = 'Tap “Send clipboard” to share what you copied. Incoming text shows a Copy button.';
+    }
+  }
+
+  function hideClipPanel() {
+    stopClipAuto();
+    const panel = $('#clipPanel');
+    if (panel) panel.hidden = true;
+    $('#clipBox').value = '';
+    $('#clipFlash').textContent = '';
+    $('#clipCopyBtn').hidden = true;
+    state.clip.last = '';
+    state.clip.pendingWrite = null;
+    state.clip.readBlocked = false;
   }
 
   /* ---- QR: show on send, scan on receive ---- */
@@ -2361,6 +2553,36 @@ const App = (() => {
     $('#startSendBtn').addEventListener('click', startSending);
     $('#scanQrBtn').addEventListener('click', openScanner);
     $('#scanCloseBtn').addEventListener('click', closeScanner);
+
+    // Shared clipboard.
+    $('#clipSendBtn').addEventListener('click', async () => {
+      // Read the OS clipboard inside this tap when we can (works on iOS too);
+      // otherwise fall back to whatever is in the box.
+      let text = $('#clipBox').value.trim();
+      if (clipCanRead()) {
+        try { const t = await navigator.clipboard.readText(); if (t) text = t; }
+        catch { /* denied or empty — use the box */ }
+      }
+      $('#clipBox').value = text;
+      clipSend(text, true);
+    });
+
+    $('#clipCopyBtn').addEventListener('click', async () => {
+      const text = state.clip.pendingWrite || $('#clipBox').value;
+      const ok = (await clipWrite(text)) || (await Util.copyText(text));
+      if (ok) {
+        state.clip.pendingWrite = null;
+        $('#clipCopyBtn').hidden = true;
+        clipFlash('Copied — paste with Ctrl/Cmd+V.');
+      } else {
+        clipFlash('Could not copy — select the text and copy it manually.', true);
+      }
+    });
+
+    $('#clipAuto').addEventListener('change', () => {
+      if ($('#clipAuto').checked) startClipAuto();
+      else stopClipAuto();
+    });
 
     $('#cancelSendBtn').addEventListener('click', () => {
       state.sender?.cancel();
