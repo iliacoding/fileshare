@@ -1,0 +1,16 @@
+{
+  "name": "Beam - send files between devices",
+  "short_name": "Beam",
+  "description": "Send files directly between two devices, peer-to-peer and encrypted. Nothing is uploaded to a server.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101012",
+  "theme_color": "#101012",
+  "icons": [
+    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
+}
