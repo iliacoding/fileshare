@@ -73,6 +73,18 @@
           <span class="choice-desc">Type the code the other device shows.</span>
         </span>
       </button>
+
+      <button class="choice-card" data-nav="clip" type="button">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h4"/>
+          </svg>
+        </span>
+        <span class="choice-body">
+          <span class="choice-title">Shared clipboard</span>
+          <span class="choice-desc">Link two devices and sync copied text.</span>
+        </span>
+      </button>
     </div>
 
     <ul class="feature-row">
@@ -254,6 +266,48 @@
       <ul class="transfer-list" id="recvTransfers"></ul>
       <p class="panel-hint tiny" id="recvIdleHint">Nothing yet - files appear here as soon as the sender starts.</p>
     </article>
+  </section>
+
+  <!-- ═══════════════════ CLIPBOARD — pick who starts ═══════════════════ -->
+  <section class="screen" id="screen-clip" aria-labelledby="clip-screen-title" hidden>
+    <div class="screen-head">
+      <button class="btn btn-ghost btn-back" data-nav="home" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        Back
+      </button>
+      <h2 id="clip-screen-title">Shared clipboard</h2>
+    </div>
+
+    <p class="hero-sub" style="margin-bottom:16px">
+      Link the two devices, then text you copy on one appears on the other's clipboard.
+      One device shows a code; the other enters or scans it.
+    </p>
+
+    <div class="choice-grid">
+      <button class="choice-card" id="clipCreateChoice" type="button">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21v.01M21 21v.01M21 17.5v.01M17.5 21v.01"/>
+          </svg>
+        </span>
+        <span class="choice-body">
+          <span class="choice-title">Show a code</span>
+          <span class="choice-desc">Get a code (and QR) for the other device.</span>
+        </span>
+      </button>
+
+      <button class="choice-card" id="clipJoinChoice" type="button">
+        <span class="choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+          </svg>
+        </span>
+        <span class="choice-body">
+          <span class="choice-title">Enter a code</span>
+          <span class="choice-desc">Type or scan the code the other device shows.</span>
+        </span>
+      </button>
+    </div>
   </section>
 
   <!-- ═══════════════════ SHARED CLIPBOARD (shown once linked) ═══════════════════ -->

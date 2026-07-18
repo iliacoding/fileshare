@@ -1384,6 +1384,7 @@ const App = (() => {
     recvFileCount: 0,
     recvTextCount: 0,
     scan: null,          // active camera scan session, see openScanner()
+    purpose: 'files',    // 'files' or 'clip' — what the current link is for
     clip: {              // shared-clipboard sync, see the clipboard section
       last: '',          // last text synced either way — guards against echo loops
       pendingWrite: null,// received text not yet placed on the OS clipboard
@@ -1419,11 +1420,42 @@ const App = (() => {
   /* ---- navigation ---- */
 
   function show(screenId) {
-    ['#screen-home', '#screen-send', '#screen-receive'].forEach((id) => {
+    ['#screen-home', '#screen-send', '#screen-receive', '#screen-clip'].forEach((id) => {
       const node = $(id);
       if (node) node.hidden = id !== screenId;
     });
     window.scrollTo(0, 0);
+  }
+
+  /**
+   * The send and receive screens are reused for the clipboard link — the
+   * connection is identical, only the purpose differs. In clipboard mode we
+   * hide the file-specific UI and relabel; the shared-clipboard panel appears
+   * on connect either way.
+   */
+  function applyPurpose() {
+    const clip = state.purpose === 'clip';
+    $('#sendFilesPanel').hidden = clip;
+    $('#startSendBtn').hidden = clip;
+    $('#send-title').textContent = clip ? 'Share clipboard' : 'Send files';
+    $('#recv-title').textContent = clip ? 'Share clipboard' : 'Receive files';
+    // In clipboard mode there's only one step, so drop the "2" step badge.
+    const badge = document.querySelector('#sendCodePanel .step-badge');
+    if (badge) badge.hidden = clip;
+  }
+
+  /** Enter the clipboard link as the code-shower ('create') or the joiner ('join'). */
+  function enterClip(role) {
+    teardown();                     // resets purpose to 'files' and restores file UI
+    state.purpose = 'clip';
+    applyPurpose();
+    if (role === 'create') {
+      show('#screen-send');
+    } else {
+      show('#screen-receive');
+      $('#codeInput').focus();
+    }
+    setStatus('idle');
   }
 
   function goHome() {
@@ -1480,6 +1512,10 @@ const App = (() => {
     $('#recvError').hidden = true;
     $('#cancelRecvBtn').hidden = true;
     setJoinBusy(false);
+
+    // Back to file mode and restore the file-specific UI.
+    state.purpose = 'files';
+    applyPurpose();
   }
 
   /* ---- file list ---- */
@@ -1916,11 +1952,16 @@ const App = (() => {
       },
     });
 
+    const clip = state.purpose === 'clip';
     $('#sendStageCode').hidden = true;
     $('#sendStageLinked').hidden = false;
-    updateSendReady();
+    if (clip) $('#sendReadyHint').hidden = true; else updateSendReady();
+    const sub = $('#sendStageLinked .linked-sub');
+    if (sub) sub.textContent = clip
+      ? 'Connected directly and encrypted. Your clipboards are shared below.'
+      : 'Connected directly and encrypted.';
     showClipPanel();
-    Util.toast('Connected. You can send now.', 'ok');
+    Util.toast(clip ? 'Connected. Clipboard sharing is on.' : 'Connected. You can send now.', 'ok');
   }
 
   async function startSending() {
@@ -2071,11 +2112,16 @@ const App = (() => {
   function onReceiverChannelOpen(channel) {
     setStatus('connected');
     Util.vibrate(40);
+    const clip = state.purpose === 'clip';
     $('#recvStageCode').hidden = true;
     $('#recvStageLinked').hidden = false;
-    $('#recvTransferPanel').hidden = false;
+    $('#recvTransferPanel').hidden = clip;
+    const sub = $('#recvStageLinked .linked-sub');
+    if (sub) sub.textContent = clip
+      ? 'Connected directly and encrypted. Your clipboards are shared below.'
+      : 'Connected directly and encrypted. Incoming files appear below.';
     showClipPanel();
-    Util.toast('Connected. Waiting for files…', 'ok');
+    Util.toast(clip ? 'Connected. Clipboard sharing is on.' : 'Connected. Waiting for files…', 'ok');
 
     state.receiver = new Transfer.Receiver(channel, {
       onText: (id, body) => {
@@ -2469,6 +2515,10 @@ const App = (() => {
           show('#screen-receive');
           setStatus('idle');
           $('#codeInput').focus();
+        } else if (target === 'clip') {
+          teardown();
+          show('#screen-clip');
+          setStatus('idle');
         }
       });
     });
@@ -2553,6 +2603,10 @@ const App = (() => {
     $('#startSendBtn').addEventListener('click', startSending);
     $('#scanQrBtn').addEventListener('click', openScanner);
     $('#scanCloseBtn').addEventListener('click', closeScanner);
+
+    // Clipboard link chooser.
+    $('#clipCreateChoice').addEventListener('click', () => enterClip('create'));
+    $('#clipJoinChoice').addEventListener('click', () => enterClip('join'));
 
     // Shared clipboard.
     $('#clipSendBtn').addEventListener('click', async () => {
